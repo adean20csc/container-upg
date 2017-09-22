@@ -1,0 +1,79 @@
+---
+#--------------------------------------------------
+# This playbook will upgrade the Docker containers on the CAM hosts
+# based on the variables set
+#--------------------------------------------------
+
+- name: Upgrade CAM host Docker Containers
+  hosts: localhost
+  gather_facts: true
+  
+  vars:
+
+  - zip_dir: /depot
+  - image: slmpuppet
+  - upg_yml: wait.yml
+  
+  tasks:
+  
+#  - name: Check for instance of Docker Container upgrade process
+#    shell: ps -ef | grep {{ upg_yml }} | egrep -v "grep"
+#    ignore_errors: true
+#    register: upg
+
+#  - name: Show container upgrade process result
+#    debug:
+#      var: upg
+
+#  - name: Proceed with container upgrade
+#    block:
+
+    - name: Get the image tag for new {{ image }} tar bzip file
+      shell: ls /{{ zip_dir }} | grep '{{ image }}.*.tar.bz2' | awk -F'[-.]' '{print $2 "." $3 "." $4}'
+      register: tar_tag
+
+    - name: Show the new {{ image }} tar bzip file tag
+      debug:
+        var: tar_tag
+
+    - name: Get image name & tag for current {{ image }} image
+      shell: docker images | grep "^{{ image }}" | awk '{print $1 ":" $2;}'
+      ignore_errors: true
+      register: image_tag
+
+    - name: Show the current image name & tag
+      debug: 
+        var: image_tag.stdout
+
+    - name: Get image ID for current {{ image }} image
+      shell: docker images | grep "^{{ image }}" | awk '{print $3;}'
+      ignore_errors: true
+      register: image_id
+
+    - name: Show the current image id
+      debug:
+        var: image_id.stdout
+
+    - name: Test Block
+      block:
+
+        - name: Copy the new {{ image }} tar bzip file to /tmp
+          copy:
+            src: /{{ zip_dir }}/{{ image }}-{{ tar_tag.stdout }}.tar.bz2
+            dest: /tmp/
+ 
+        - name: Stop & remove the {{ image }} container
+          shell: docker ps -a | awk '{ print $1,$2 }' | grep {{ image_tag.stdout }} | awk '{print $1 }' | xargs -I {} docker rm -f {}
+
+        - name: Remove the existing {{ image }} image
+          shell: docker rmi {{ image_id.stdout }}
+          ignore_errors: true
+
+        - name: Load the new {{ image }} image from tar.bz2 file
+          shell: docker load -i {{ zip_dir }}/{{ image }}*.tar.bz2
+
+
+#      when: image and '"image_tag" not in tar_tag.stdout'
+
+      when: tar_tag.stdout not in image_tag.stdout
+#    when: upg.failed

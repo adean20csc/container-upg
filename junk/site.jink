@@ -1,0 +1,116 @@
+---
+#--------------------------------------------------
+# This playbook will upgrade the Docker containers on the CAM hosts
+# based on the variables set
+#--------------------------------------------------
+
+- name: Upgrade CAM host Docker Containers
+  hosts: localhost
+  gather_facts: true
+  
+  vars:
+
+  - zip_dir: /depot
+  - image: slmpuppet
+  
+  tasks:
+  
+    - name: Get the image tag for new {{ image }} tar bzip file
+      shell: ls /{{ zip_dir }} | grep '{{ image }}.*.tar.bz2' | awk -F'[-.]' '{print $2 "." $3 "." $4}'
+#     shell: ls /{{ zip_dir }} | grep '{{ image }}.*.tar.bz2' | awk -F'[-.]' '{print $1 "-" $2 "." $3 "." $4}'
+#     shell: ls /{{ zip_dir }} | grep {{ image_tag.stdout }} | awk -F'[-.]' '{print $1 "-" $2 "." $3 "." $4}'
+      register: tar_tag
+
+    - name: Show the new {{ image }} tar bzip file tag
+      debug:
+        var: tar_tag
+
+    - name: Get image name & tag for current {{ image }} image
+#      shell: docker images | grep "^{{ image }}" | awk '{print $1 "-" $2;}'
+      shell: docker images | grep "^{{ image }}" | awk '{print $1 ":" $2;}'
+      ignore_errors: true
+      register: image_tag
+
+    - name: Show the current image name & tag
+      debug: 
+        var: image_tag.stdout
+
+    - name: Get image ID for current {{ image }} image
+      shell: docker images | grep "^{{ image }}" | awk '{print $3;}'
+#      shell: docker images | grep "^{{ image }}" | awk '{print $1 "-" $2;}'
+      ignore_errors: true
+      register: image_id
+
+    - name: Show the current image id
+      debug:
+        var: image_id.stdout
+
+    - name: Test Block
+      block:
+
+        - name: Copy the new {{ image }} tar bzip file to /tmp
+          copy:
+            src: /{{ zip_dir }}/{{ image }}-{{ tar_tag.stdout }}.tar.bz2
+            dest: /tmp/
+ 
+        - name: Stop & remove the {{ image }} container
+#          shell: docker ps -f {{ image }} | awk '{ print $1 }' | xargs -I {} docker stop {}
+#          shell: docker ps -f ancestor={{ image_tag.stdout }} | awk '{ print $1 }' | xargs -I {} docker rm {}
+          shell: docker ps -a | awk '{ print $1,$2 }' | grep {{ image_tag.stdout }} | awk '{print $1 }' | xargs -I {} docker rm -f {}
+#          register: container_id
+
+#        - debug:
+#            var: container_id
+
+        - name: Remove existing image if versions don't match (force rebuild)
+          docker_image:
+            name: "{{ image }}"
+            tag: "{{ image_tag.stdout }}"
+            state: absent
+            force: yes
+#         when: current_imagetag != ""
+
+#      when: image and '"image_tag" not in tar_tag.stdout'
+
+#      when: tar_tag.stdout != image_tag.stdout
+      when: tar_tag.stdout not in image_tag.stdout
+
+
+
+
+
+#  vars:
+#  - docker_images:
+#      - slmansible
+#      - slmio
+#      - slmpuppet
+#      - slmsamba
+#      - slmzsync
+
+#- name: Stop & remove the container using {{ image }} image
+#   docker_container:
+#     image: '"{{ image }}":image_tag.stdout'
+#     state: stopped
+#    register: container_state
+
+
+
+###############
+# Using the Ansible docker_container module
+##############
+
+#        - name: Get the container id using the {{ image }} image
+#          shell: docker ps -a | grep {{ image_tag.stdout }} | awk '{print $1}'
+#          register: container_id
+
+#       - name: Show the container_id
+#          debug:
+#            var: container_id.stdout
+
+#        - name: Get the container name using the {{ image }} image
+#          shell: docker ps -a --filter ancestor="image_id.stdout" --format '{{.Names}}'
+
+#        - name: Stop & remove the container using {{ image }} image
+#          docker_container:
+#            image: '"{{ image }}":image_tag.stdout'
+#            state: absent

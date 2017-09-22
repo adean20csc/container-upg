@@ -1,0 +1,12 @@
+---
+#--------------------------------------------------
+# This playbook will upgrade the Docker containers on the CAM hosts
+# based on the variables set
+#--------------------------------------------------
+
+- name: Upgrade CAM host Docker Containers
+  hosts: localhost
+  gather_facts: true
+  tasks:
+ 
+  - include: tasks.yml

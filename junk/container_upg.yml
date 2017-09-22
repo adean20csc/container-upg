@@ -1,0 +1,138 @@
+---
+#--------------------------------------------------
+# This playbook will upgrade the Docker containers on the CAM hosts
+# based on the variables set
+#--------------------------------------------------
+
+- name: Upgrade CAM host Docker Containers
+  hosts: localhost
+  gather_facts: true
+  
+  vars:
+#--------------------------------------------------
+# Change these vars to 'true' to upgrade the container
+
+  - upg_ansible_sandbox: true    
+
+
+  - docker_projects:
+      - { upg: false, image: gitlab/gitlab-ce, name: , key: }
+      - { upg: "{{ upg_ansible_sandbox }}", image: slmansible, name: ansible-sandbox, key: slm_ansible_sandbox_ro_deployment_key_rsa }
+      - { upg: false, image: slmpuppet, name: docker-slmpuppet, key: slm_slmpuppet_ro_deployment_key_rsa }
+      - { upg: false, image: slmsamba, name: docker-slmsamba, key: slm_slmsamba_ro_deployment_key_rsa }
+      - { upg: false, image: slamio, name: docker-mediacascade, key: slamio_ro_deployment_key_rsa }
+      - { upg: false, image: slmzsync, name: docker-mediacascade, key: slm_mediacascade_ro_deployment_key_rsa }
+
+  tasks:
+
+#    - name: Upgrade Docker Containers from repos
+#      block: 
+
+    - name: Remove existing project from /opt/csc/src
+      file: 
+        path: /opt/csc/src/{{ item.name }}
+        state: absent
+      with_items: "{{ docker_projects }}"
+      when: item.upg and item.name is defined
+
+#    - name: Remove existing Docker image
+#      docker_image:
+#        name: "{{ item.image }}"
+#        state: absent
+#      with_items: "{{ docker_projects }}"
+#      when: item.upg and item.image is defined
+
+    - name: Ensure git deployment key(s) is in place
+      copy:
+        src: "{{ item.key }}"
+        dest: /opt/csc/{{ item.key }}
+        mode: 0600
+      with_items: "{{ docker_projects }}"
+      when: item.upg and item.key is defined
+
+    - name: Ensure docker project(s) is checked out
+      git:
+        repo: git@github.csc.com:Automation/{{ item.name }}.git
+        dest: /opt/csc/src/{{ item.name }}
+        force: yes
+        key_file: /opt/csc/{{ item.key }}
+        accept_hostkey: yes
+      with_items: "{{ docker_projects }}"
+      when: item.upg and item.key is defined
+
+    - name: Checkout the latest tagged version
+      shell: "git checkout $(git describe --abbrev=0 --tags)"
+      args:
+        chdir: "/opt/csc/src/{{ item.name }}"
+      register: git_slmzsync  
+
+    - name: Show slmzsync_tag
+      debug:
+        var: slmzsync_tag
+
+
+
+
+
+    - name: Get list of docker image tags present
+      shell: docker images | grep "^slmzsync" | awk '{print $2;}'
+      register: image_tags
+
+    - debug:
+        var: image_tags
+
+  #  - set_fact:
+  #      current_imagetag: ""
+
+    - name: Get existing image and tag
+      set_fact:
+        current_imagetag: "{{ image_tags.stdout_lines[0] }}"
+      when: "{{ image_tags.stdout_lines | length > 0 }}"
+
+    - name: Print existing slmio docker image and tag
+      debug:
+        var: current_imagetag
+
+    - name: Remove existing image if versions dont match (force rebuild)
+      docker_image:
+        name: "slmzsync"
+        tag: "{{ current_imagetag }}"
+        state: absent
+        force: yes
+      when:
+        - current_imagetag != ""
+
+
+
+
+
+
+
+
+#  - name: Check if slmzsync Docker image exists
+#    docker_image_facts:
+#      name: slmzsync
+#    register: slmzsync_image
+
+#  - debug:
+#      var: slmzsync_image
+
+#  - name: Remove existing slmzsync Docker image
+#    docker_image:
+#      name: slmzsync
+#      state: absent
+#      force: yes
+#    when: "{{ slmzsync_image.images | length > 0 }}"
+
+#  - name: Build slmzsync Docker image
+#    docker_image:
+#      name: "slmzsync"
+#      path: "/opt/csc/src/docker-mediacascade"
+#      pull: False
+#    register: slmzsync
+#    until: slmzsync|success
+#    retries: 6
+#    delay: 60
+
+#       when: {{ item.upg }}
+

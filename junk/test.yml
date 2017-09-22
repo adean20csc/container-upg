@@ -1,0 +1,44 @@
+---
+#--------------------------------------------------
+# This playbook will upgrade the Docker containers on the CAM hosts
+# based on the variables set
+#--------------------------------------------------
+
+- name: Upgrade CAM host Docker Containers
+  hosts: localhost
+  gather_facts: true
+  
+  vars:
+
+  - zip_dir: /depot
+  - image: slmansible
+  - upg_yml: wait.yml
+ 
+  tasks:
+
+  - name: Master CAM to Github DNS resolution test
+    ignore_errors: true
+    command: nslookup github.com
+    register: github_dns
+
+  - debug:
+     var: github_dns
+
+
+#  - name: Check for instance of Docker Container upgrade process
+#    shell: ps -ef | grep {{ upg_yml }} | egrep -v "grep"
+#    ignore_errors: true
+#    register: upg
+
+#  - debug:
+#      var: upg
+
+
+#    - name: Get {{ image }} facts with Ansible docker_image_facts module
+#      docker_image_facts:
+#        name: "{{ image }}"
+#      register: slmansible_images
+
+#    - name: Show {{ image }} image facts
+#      debug:
+#        var: slmansible_images

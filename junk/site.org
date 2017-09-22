@@ -1,0 +1,75 @@
+---
+#--------------------------------------------------
+# This playbook will upgrade the Docker containers on the CAM hosts
+# based on the variables set
+#--------------------------------------------------
+
+- name: Upgrade CAM host Docker Containers
+  hosts: localhost
+  gather_facts: true
+  
+  vars:
+#--------------------------------------------------
+# Change these vars to 'true' to upgrade the container
+
+  - upg_gitlab: false    
+  - upg_slmansible: false
+  - upg_slmpuppet: true
+  - upg_slmsamba: true
+  - upg_slamio: true
+  - upg_slmzsync: true
+
+  - docker_images:
+      - slmansible
+      - slmio
+      - slmpuppet
+      - slmsamba
+      - slmzsync
+
+  - docker_projects:
+      - { upg: "{{ upg_gitlab }}", image: gitlab/gitlab-ce, name: , key: }
+      - { upg: "{{ upg_slmansible }}", image: slmansible, name: ansible-sandbox, key: slm_ansible_sandbox_ro_deployment_key_rsa }
+      - { upg: "{{ upg_slmpuppet }}", image: slmpuppet, name: docker-slmpuppet, key: slm_slmpuppet_ro_deployment_key_rsa }
+      - { upg: "{{ upg_slmsamba }}", image: slmsamba, name: docker-slmsamba, key: slm_slmsamba_ro_deployment_key_rsa }
+      - { upg: "{{ upg_slamio }}", image: slamio, name: docker-mediacascade, key: slamio_ro_deployment_key_rsa }
+      - { upg: "{{ upg_slmzsync }}", image: 'slmzsync:v1.0.0', name: docker-mediacascade, key: slm_mediacascade_ro_deployment_key_rsa }
+
+  - image: slmpuppet
+  
+  tasks:
+  
+    - name: Get list of docker image tags present for each image
+      shell: docker images | grep "^{{ image }}" | awk '{print $2;}'
+      with_items: "{{ docker_images }}"
+      register: image_tags
+
+    - debug: 
+        var: image_tags
+
+#  - debug:
+#      var: image_tags.results.stdout
+#    with_items: "{{ docker_images }}"
+    
+
+#  - set_fact: 
+#      current_imagetag: ""
+
+#  - name: Get existing image and tag
+#    set_fact:
+#      current_imagetag: "{{ image_tags.stdout_lines[0] }}"
+#    when: "{{ image_tags.stdout_lines | length > 0 }}"
+
+#  - name: Print existing slmio docker image and tag
+#    debug:
+#      var: current_imagetag
+
+#  - name: Remove existing image if versions dont match (force rebuild)
+#    docker_image:
+#      name: "slmzsync"
+#      tag: "{{ current_imagetag }}"
+#      state: absent
+#      force: yes
+#    when:
+#      - current_imagetag != ""
+
+

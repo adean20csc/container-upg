@@ -1,0 +1,124 @@
+---
+#--------------------------------------------------
+# This will build the SLMPUPPET Docker Image
+#--------------------------------------------------
+- name: Set vars for tasks file
+  set_fact:
+    repo: docker-slmpuppet
+    image: slmpuppet
+    deployment_key: slm_slmpuppet_ro_deployment_key_rsa
+  
+- name: Ensure {{ repo }} git deployment key is in place
+  copy:
+    src: /etc/{{ deployment_key }}
+    dest: /opt/csc/{{ deployment_key }}
+    mode: 0600
+
+- name: Ensure {{ repo }} project is checked out
+  git:
+    repo: git@github.csc.com:Automation/{{ repo }}
+    dest: /opt/csc/src/{{ repo }}
+    force: yes
+    key_file: /opt/csc/{{ deployment_key }}
+    accept_hostkey: yes
+
+- name: Checkout the latest tagged version of {{ repo }}
+  shell: "git checkout $(git describe --abbrev=0 --tags)"
+  args:
+    chdir: /opt/csc/src/{{ repo }}
+
+- name: Git the tagged version of "{{ repo }}"
+  shell: git describe --tags
+  args:
+    chdir: /opt/csc/src/{{ repo }}
+  register: git_tags
+
+- name: Show tagged version of "{{ repo }}"
+  debug:
+    var: git_tags
+
+- name: Get list of docker image tags present
+  shell: docker images | grep "^{{ image }}" | awk '{print $2;}'
+  register: current_tags
+
+- name: Show the current image tags
+  debug:
+    var: current_tags
+
+- name: Remove existing image (force rebuild)
+  docker_image:
+    name: "{{ image }}"
+    tag: "{{ current_tags.stdout }}"
+    state: absent
+    force: yes
+  when:
+    - current_tags != ""
+    - current_tags != git_tags
+
+- name: Ensure "{{ image }}" image is built
+  docker_image:
+    name: "{{ image }}"
+    tag: "{{ git_tags.stdout }}"
+    path: /opt/csc/src/{{ repo }}
+    pull: False
+  register: new_image
+  until: new_image|success
+  retries: 3
+  delay: 30
+  when:
+    - current_tags != git_tags
+
+- name: Show new image
+  debug:
+    var: new_image
+
+- name: Set the tar bzip file name
+  set_fact:
+    tar_bzip: /images/{{ image }}-{{ git_tags.stdout }}.tar.bz2
+
+- name: Find previously built {{ image }} tar bzip files
+  find:
+    path: /images
+    patterns: "{{ image }}-*.tar.bz2"
+  register: old_tar_bz2
+
+- name: Show old {{ image }} tar bzip files
+  debug:
+    var: old_tar_bz2
+
+- name: Remove old {{ image }} tar bzip files
+  file:
+    path: "{{ item.path }}"
+    state: absent
+  with_items: "{{ old_tar_bz2.files | default ([]) }}"
+
+- name: Export new {{ image }} to a tar bzip file
+  shell: "docker save {{ image }}-{{ git_tags.stdout }} | bzip2 > {{ tar_bzip }}"
+  args:
+    creates: "{{ tar_bzip }}"
+  
+- name: Ensure correct mode on {{ tar_bzip }}
+  file:
+    path: "{{ tar_bzip }}"
+    mode: 0644
+
+- name: Fetch {{ tar_bzip }} to Jenkins Server
+  fetch:
+    flat: yes
+    src: "{{ tar_bzip }}"
+    dest: /tmp/"{{ tar_bzip | basename }}"
+    fail_on_missing: yes
+  when: xfer_docker_images
+  become: no  # avoid memory issue with fetch + become
+
+- name: Xfer {{ tar_bzip }} from Jenkins to labfs as nightly release
+  local_action: >
+    shell scp -o StrictHostKeyChecking=no /tmp/{{ tar_bzip | basename }} {{ xfer_to_user }}@{{ xfer_to_host }}:{{ xfer_to_path }}
+  when: xfer_docker_images
+  become: no
+
+- name: Ensure {{ tar_bzip }} is cleaned up from tmp
+  file:
+    path: /tmp/"{{ tar_bzip | basename }}"
+    state: absent
+

@@ -1,0 +1,110 @@
+---
+#--------------------------------------------------
+# This playbook includes the tasks to be looped over
+# based on the variables set in the upg_image.yml
+#--------------------------------------------------
+
+- name: Set directory variables
+  set_fact:
+    zip_dir: /depot
+    tmp_dir: /tmp
+
+- debug:
+    var: zip_dir
+
+- debug:
+    var: "{{ image }}"
+
+- set_fact:
+    dkr_image: "{{ image }}"
+
+- debug:
+    var: dkr_image
+
+- name: Get the image tag for new {{ image }} tar bzip file
+  shell: ls /{{ zip_dir }} | grep '"{{ image }}".*.tar.bz2' | awk -F'[-.]' '{print $2 "." $3 "." $4}'
+#     shell: ls /{{ zip_dir }} | grep '{{ image }}.*.tar.bz2' | awk -F'[-.]' '{print $1 "-" $2 "." $3 "." $4}'
+#     shell: ls /{{ zip_dir }} | grep {{ image_tag.stdout }} | awk -F'[-.]' '{print $1 "-" $2 "." $3 "." $4}'
+  register: tar_tag
+
+- name: Show the new {{ image }} tar bzip file tag
+  debug:
+    var: tar_tag
+
+- name: Get image name & tag for current {{ image }} image
+#      shell: docker images | grep "^{{ image }}" | awk '{print $1 "-" $2;}'
+  shell: docker images | grep "^{{ image }}" | awk '{print $1 ":" $2;}'
+  ignore_errors: true
+  register: image_tag
+
+- name: Show the current image tag
+  debug: 
+    var: image_tag.stdout
+
+- name: Get image ID for current {{ image }} image
+  shell: docker images | grep "^{{ image }}" | awk '{print $3;}'
+#      shell: docker images | grep "^{{ image }}" | awk '{print $1 "-" $2;}'
+  ignore_errors: true
+  register: image_id
+
+- name: Show the current image id
+  debug:
+    var: image_id.stdout
+
+- name: Test Block
+  block:
+
+    - name: Copy the new {{ image }} tar bzip file to /tmp
+      copy:
+        src: /{{ zip_dir }}/{{ image }}-{{ tar_tag.stdout }}.tar.bz2
+        dest: /tmp/
+ 
+#        - name: Stop & remove the {{ image }} container
+#           shell: docker stop
+#           shell: docker ps -f {{ image }} | awk '{ print $1 }' | xargs -I {} docker stop {}
+#          shell: docker ps -f ancestor={{ image_tag.stdout }} | awk '{ print $1 }' | xargs -I {} docker rm {}
+#          shell: docker ps -a | awk '{ print $1,$2 }' | grep {{ image_tag.stdout }} | awk '{print $1 }' | xargs -I {} docker rm -f {}
+#          register: container_id
+
+#        - debug:
+#            var: container_id
+
+#        - name: Remove the {{ image }} Docker Container
+#          shell: docker ps -a | awk '{ print $1,$2 }' | grep {{ image }}:image_tag.stdout | awk '{print $1 }' | xargs -I {} docker rm {} 
+#         with_items: "{{ docker_images }}"
+#          register: images
+
+#        - debug:
+#            var: images
+
+
+
+  
+#  - name: Remove existing image if versions dont match (force rebuild)
+#    docker_image:
+#      name: "slmzsync"
+#      tag: "{{ current_imagetag }}"
+#      state: absent
+#      force: yes
+#    when:
+#      - current_imagetag != ""
+
+#      when: image and '"image_tag" not in tar_tag.stdout'
+
+#      when: tar_tag.stdout != image_tag.stdout
+      when: tar_tag.stdout not in image_tag.stdout
+
+
+#  vars:
+#  - docker_images:
+#      - slmansible
+#      - slmio
+#      - slmpuppet
+#      - slmsamba
+#      - slmzsync
+
+#- name: Stop & remove the container using {{ image }} image
+#   docker_container:
+#     image: '"{{ image }}":image_tag.stdout'
+#     state: stopped
+#    register: container_state

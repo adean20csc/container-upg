@@ -1,0 +1,28 @@
+---
+#-------------------------------------------------
+# This playbook will upgrade the Docker containers
+# on the CAM hosts using the include_upg_image.yml
+#-------------------------------------------------
+- name: Upgrade CAM host Docker Containers
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+### Docker images to be upgraded    
+    - docker_images: #["slmansible","slmio","slmpuppet","slmsamba","slmzsync"]
+#       - gitlab/gitlab-ce
+#       - slmansible
+#       - slmio
+       - slmpuppet
+#       - slmsamba
+#       - slmzsync
+### Source directory for new images
+    - zip_dir: /depot
+### Temporary directory to stage new image
+    - tmp_dir: /tmp
+
+
+  tasks:
+### Include the tasks for Ansible to loop over
+    - include: include_upg_image.yml image="{{ item }}"
+      with_items: docker_images
